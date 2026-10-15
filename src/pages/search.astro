@@ -1,24 +1,5 @@
 ---
-import BaseLayout from '../layouts/BaseLayout.astro';
-const isDev = import.meta.env.DEV;
+import { defaultLang, localePath } from '../i18n/ui';
+import StaticRedirect from '../components/StaticRedirect.astro';
 ---
-
-<BaseLayout title="Search">
-  <div class="mx-auto max-w-3xl">
-    <h1 class="mb-4 text-4xl font-semibold">Find a topic</h1>
-    <p class="mb-8 text-stone-600">Search the articles, then narrow results by book, category, or tag.</p>
-    {isDev ? <p class="rounded-xl border border-amber-200 bg-amber-50 p-5 leading-relaxed">
-      Search is available after a production build. Run <code>npm run build</code>, then <code>npm run preview</code>, and open the preview URL printed in your terminal.
-    </p> : <>
-      <link href="/pagefind/pagefind-component-ui.css" rel="stylesheet" />
-      <script is:inline type="module" src="/pagefind/pagefind-component-ui.js"></script>
-      <pagefind-input placeholder="Search topics..."></pagefind-input>
-      <div class="my-5"><pagefind-summary></pagefind-summary></div>
-      <div class="grid gap-6 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]">
-        <pagefind-filter-pane></pagefind-filter-pane>
-        <pagefind-results></pagefind-results>
-      </div>
-    </>}
-    <noscript><p class="mt-6">Search requires JavaScript. You can still <a href="/" class="underline">browse all topics</a>.</p></noscript>
-  </div>
-</BaseLayout>
+<StaticRedirect lang={defaultLang} to={localePath(defaultLang, 'search/')} />

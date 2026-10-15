@@ -1,0 +1,17 @@
+---
+import { ui, type Lang } from '../i18n/ui';
+interface Props { to: string; lang: Lang; }
+const { to, lang } = Astro.props;
+const t = ui(lang);
+---
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content={`0;url=${to}`} />
+    <meta name="robots" content="noindex" />
+    <title>{t.brand}</title>
+  </head>
+  <body><a href={to}>{t.topics} →</a></body>
+</html>

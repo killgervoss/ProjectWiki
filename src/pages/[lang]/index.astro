@@ -1,0 +1,74 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import TopicCard from '../../components/TopicCard.astro';
+import { languages, localePath, ui, withCount, type Lang } from '../../i18n/ui';
+import { createTopicRegistry } from '../../lib/topics';
+
+export function getStaticPaths() { return languages.map(lang => ({ params: { lang }, props: { lang } })); }
+interface Props { lang: Lang; }
+const { lang } = Astro.props;
+const t = ui(lang);
+const registry = createTopicRegistry(await getCollection('topics'));
+const topics = registry.published.filter(topic => topic.data.lang === lang)
+  .sort((a, b) => a.data.title.localeCompare(b.data.title, lang));
+const categories = [...new Set(topics.map(topic => topic.data.category))].sort();
+const books = [...new Set(topics.flatMap(topic => topic.data.sources.map(source => source.book)))].sort();
+const tags = [...new Set(topics.flatMap(topic => topic.data.tags))].sort();
+const languageLinks = Object.fromEntries(languages.map(language => [language, localePath(language)]));
+---
+
+<BaseLayout lang={lang} title={t.directory} languageLinks={languageLinks}>
+  <section class="directory-hero">
+    <div class="shell">
+      <p class="eyebrow">{t.eyebrow}</p>
+      <h1>{t.heroTitle}</h1>
+      <p class="hero-description">{t.heroDescription}</p>
+      <a href={localePath(lang, 'search/')} class="hero-search">{t.search} →</a>
+    </div>
+  </section>
+  <section class="shell directory-section" aria-label={t.directory}>
+    {topics.length > 0 ? <>
+      <div class="directory-toolbar">
+        <p id="topic-count" role="status" data-template={t.topicCount}>{withCount(t.topicCount, topics.length)}</p>
+        <div class="filters" id="directory-filters" hidden>
+          <label>{t.category}<select id="category"><option value="">{t.allCategories}</option>{categories.map(value => <option value={value}>{value}</option>)}</select></label>
+          <label>{t.book}<select id="book"><option value="">{t.allBooks}</option>{books.map(value => <option value={value}>{value}</option>)}</select></label>
+          <label>{t.tag}<select id="tag"><option value="">{t.allTags}</option>{tags.map(value => <option value={value}>{value}</option>)}</select></label>
+          <button type="button" id="clear-filters" class="quiet-button">{t.clear}</button>
+        </div>
+      </div>
+      <div class="topic-grid">{topics.map(topic => <TopicCard topic={topic} lang={lang} />)}</div>
+      <p id="empty-state" hidden class="empty-panel">{t.noMatches}</p>
+    </> : <div class="empty-panel"><p>{t.noArticles}</p>{lang !== 'mn' && <a href={localePath('mn')} class="text-link">{t.browseMongolian} →</a>}</div>}
+  </section>
+</BaseLayout>
+
+<script>
+  const panel = document.querySelector<HTMLElement>('#directory-filters');
+  const category = document.querySelector<HTMLSelectElement>('#category');
+  const book = document.querySelector<HTMLSelectElement>('#book');
+  const tag = document.querySelector<HTMLSelectElement>('#tag');
+  const count = document.querySelector<HTMLElement>('#topic-count');
+  const empty = document.querySelector<HTMLElement>('#empty-state');
+  const cards = [...document.querySelectorAll<HTMLElement>('[data-topic-card]')].map(element => ({
+    element, books: JSON.parse(element.dataset.books ?? '[]') as string[], tags: JSON.parse(element.dataset.tags ?? '[]') as string[],
+  }));
+  if (panel && category && book && tag && count && empty) {
+    panel.hidden = false;
+    const update = () => {
+      let visible = 0;
+      for (const card of cards) {
+        const show = (!category.value || card.element.dataset.category === category.value)
+          && (!book.value || card.books.includes(book.value)) && (!tag.value || card.tags.includes(tag.value));
+        card.element.hidden = !show;
+        if (show) visible++;
+      }
+      count.textContent = (count.dataset.template ?? '{count}').replace('{count}', String(visible));
+      empty.hidden = visible !== 0;
+    };
+    [category, book, tag].forEach(select => select.addEventListener('change', update));
+    document.querySelector('#clear-filters')?.addEventListener('click', () => { category.value = ''; book.value = ''; tag.value = ''; update(); });
+    update();
+  }
+</script>

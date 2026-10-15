@@ -7,6 +7,7 @@ export default defineConfig({
   output: 'static',
   integrations: [mdx(), react()],
   vite: { plugins: [tailwindcss()] },
-  // Set `site: 'https://your-domain.example'` when you know your real domain.
-  // This starter assumes deployment at the domain root, without a `base` path.
+  // Languages are defined in src/i18n/ui.ts. The [lang] pages generate
+  // explicit static routes; no runtime locale middleware is needed.
+  // Add `site: 'https://your-actual-domain'` when deploying.
 });

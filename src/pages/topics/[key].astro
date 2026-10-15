@@ -1,0 +1,12 @@
+---
+// Compatibility URLs: /topics/<key>/ goes to the Mongolian reader page.
+import { getCollection } from 'astro:content';
+import { topicPath } from '../../i18n/ui';
+import StaticRedirect from '../../components/StaticRedirect.astro';
+export async function getStaticPaths() {
+  const topics = await getCollection('topics', ({ data }) => !data.draft && data.lang === 'mn');
+  return topics.map(topic => ({ params: { key: topic.data.topicKey }, props: { key: topic.data.topicKey } }));
+}
+const { key } = Astro.props;
+---
+<StaticRedirect lang="mn" to={topicPath('mn', key)} />

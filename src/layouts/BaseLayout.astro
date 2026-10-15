@@ -1,44 +1,66 @@
 ---
 import '../styles/global.css';
+import LanguageSwitcher from '../components/LanguageSwitcher.astro';
+import { brand } from '../lib/brand';
+import { localePath, ui, type Lang } from '../i18n/ui';
+import type { TranslationLinks } from '../lib/topics';
 
 interface Props {
+  lang: Lang;
   title: string;
   description?: string;
+  languageLinks: TranslationLinks;
 }
-const { title, description = 'Explore Buddhist concepts one topic at a time.' } = Astro.props;
+const { lang, title, languageLinks } = Astro.props;
+const t = ui(lang);
+const description = Astro.props.description ?? t.description;
+const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : undefined;
+const alternates = Object.entries(languageLinks);
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={lang}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
-    <title>{title} | Open Knowledge</title>
+    <meta name="theme-color" content="#153a3d" />
+    <title>{title} | {t.brand}</title>
+    {canonical && <link rel="canonical" href={canonical} />}
+    {Astro.site && alternates.map(([language, href]) => <link rel="alternate" hreflang={language} href={new URL(href!, Astro.site).href} />)}
+    {Astro.site && <meta property="og:image" content={new URL(brand.emblem, Astro.site).href} />}
   </head>
-  <body>
-    <a href="#main" class="sr-only focus:not-sr-only focus:block focus:p-4">Skip to content</a>
-    <header class="border-b border-stone-200 bg-white">
-      <nav aria-label="Main navigation" class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-5">
-        <a href="/" class="text-lg font-semibold">Open Knowledge</a>
-        <div class="flex gap-5 text-sm">
-          <a href="/" class="hover:underline">Topics</a>
-          <a href="/search/" class="hover:underline">Search <span class="hidden sm:inline">(Ctrl/⌘ K)</span></a>
+  <body style={`--brand-mountains: url("${brand.mountains}"); --brand-waves: url("${brand.waves}");`}>
+    <a href="#main" class="skip-link">{t.skip}</a>
+    <header class="site-header">
+      <div class="header-inner">
+        <a href={localePath(lang)} class="brand-link" aria-label={t.brand}>
+          <img src={brand.mark} alt="" width="1024" height="941" class="brand-mark" />
+          <img src={brand.wordmark} alt="" width="1569" height="411" class="brand-wordmark" />
+        </a>
+        <div class="header-controls">
+          <nav aria-label={t.mainNav} class="main-nav">
+            <a href={localePath(lang)}>{t.topics}</a>
+            <a href={localePath(lang, 'search/')} data-search-link>{t.search} <span class="keyboard-hint">Ctrl/⌘ K</span></a>
+          </nav>
+          <LanguageSwitcher lang={lang} links={languageLinks} />
         </div>
-      </nav>
+      </div>
     </header>
-    <main id="main" class="mx-auto max-w-6xl px-5 py-10 sm:py-16">
-      <slot />
-    </main>
-    <footer class="mx-auto max-w-6xl border-t border-stone-200 px-5 py-7 text-sm text-stone-600">
-      Learning prototype · Example content requires source verification before publication.
+    <main id="main"><slot /></main>
+    <footer class="site-footer">
+      <div class="shell footer-inner">
+        <a href={localePath(lang)} class="footer-lockup" aria-label={t.brand}>
+          <img src={brand.lockup} alt="" width="1673" height="748" loading="lazy" />
+        </a>
+        <p>{t.description}</p>
+      </div>
     </footer>
     <script>
-      // A small browser script. Code in the frontmatter above runs during rendering.
-      document.addEventListener('keydown', (event) => {
-        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-          event.preventDefault();
-          window.location.assign('/search/');
+      document.addEventListener('keydown', event => {
+        if ((event.metaKey || event.ctrlKey) && (event.code === 'KeyK' || event.key.toLowerCase() === 'k')) {
+          const link = document.querySelector<HTMLAnchorElement>('[data-search-link]');
+          if (link) { event.preventDefault(); window.location.assign(link.href); }
         }
       });
     </script>

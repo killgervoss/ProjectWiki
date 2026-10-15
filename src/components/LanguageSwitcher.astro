@@ -1,0 +1,14 @@
+---
+import { languages, languageNames, ui, type Lang } from '../i18n/ui';
+import type { TranslationLinks } from '../lib/topics';
+interface Props { lang: Lang; links: TranslationLinks; }
+const { lang, links } = Astro.props;
+const t = ui(lang);
+---
+
+<nav aria-label={t.languageNav} class="language-switcher">
+  {languages.map(target => links[target] ?
+    <a href={links[target]} lang={target} hreflang={target} aria-current={lang === target ? 'page' : undefined}>{languageNames[target]}</a>
+    : <span lang={target} aria-disabled="true" title={t.notTranslated}>{languageNames[target]}</span>
+  )}
+</nav>

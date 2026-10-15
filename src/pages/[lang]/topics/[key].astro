@@ -1,0 +1,59 @@
+---
+import { getCollection, render } from 'astro:content';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { languages, languageNames, localePath, topicPath, ui, withCount } from '../../../i18n/ui';
+import { createTopicRegistry, type Topic, type TranslationLinks } from '../../../lib/topics';
+
+export async function getStaticPaths() {
+  const registry = createTopicRegistry(await getCollection('topics'));
+  return registry.published.map(topic => ({
+    params: { lang: topic.data.lang, key: topic.data.topicKey },
+    props: { topic, related: registry.resolveRelated(topic), languageLinks: registry.translationLinks(topic) },
+  }));
+}
+interface Props { topic: Topic; related: Topic[]; languageLinks: TranslationLinks; }
+const { topic, related, languageLinks } = Astro.props;
+const lang = topic.data.lang;
+const t = ui(lang);
+const { Content, headings } = await render(topic);
+const sections = headings.filter(heading => heading.depth === 2);
+const minutes = Math.max(1, Math.ceil((topic.body ?? '').split(/\s+/).filter(Boolean).length / 200));
+const missingTranslation = languages.some(language => !languageLinks[language]);
+---
+
+<BaseLayout lang={lang} title={topic.data.title} description={topic.data.summary} languageLinks={languageLinks}>
+  <div class="shell reader-shell">
+    <a href={localePath(lang)} class="text-link back-link">← {t.back}</a>
+    {missingTranslation && <p class="translation-notice">{t.missingTranslation}</p>}
+    <article data-pagefind-body class="reader-article">
+      <header class="reader-header">
+        <p class="category-badge" data-pagefind-filter="category">{topic.data.category}</p>
+        <h1 data-pagefind-meta="title">{topic.data.title}</h1>
+        <p class="reader-summary">{topic.data.summary}</p>
+        <p data-pagefind-ignore class="reading-time">{withCount(t.readingTime, minutes)}</p>
+        {topic.data.aliases.length > 0 && <p class="aliases">{t.aliases}: {topic.data.aliases.join(', ')}</p>}
+        {topic.data.tags.length > 0 && <ul class="tag-list" aria-label={t.tags}>
+          {topic.data.tags.map(tag => <li data-pagefind-filter="tag">{tag}</li>)}
+        </ul>}
+      </header>
+      {sections.length > 0 && <nav class="contents-panel" data-pagefind-ignore aria-label={t.onThisPage}>
+        <h2>{t.onThisPage}</h2>
+        <ul>{sections.map(heading => <li><a href={`#${heading.slug}`}>{heading.text}</a></li>)}</ul>
+      </nav>}
+      <div class="reader"><Content /></div>
+      <section class="source-panel" aria-labelledby="sources-heading">
+        <h2 id="sources-heading">{t.sources}</h2>
+        <ul>{topic.data.sources.map(source => <li>
+          <cite data-pagefind-filter="book">{source.book}</cite> — {source.author}; {source.chapter}{source.pages ? `, ${t.pages} ${source.pages}` : ''}.
+        </li>)}</ul>
+      </section>
+    </article>
+    {related.length > 0 && <aside class="related-panel" aria-labelledby="related-heading">
+      <h2 id="related-heading">{t.related}</h2>
+      <ul>{related.map(target => <li>
+        <a href={topicPath(target.data.lang, target.data.topicKey)} lang={target.data.lang} class="text-link">{target.data.title}</a>
+        {target.data.lang !== lang && <span class="language-badge">{t.otherLanguage}: <span lang={target.data.lang}>{languageNames[target.data.lang]}</span></span>}
+      </li>)}</ul>
+    </aside>}
+  </div>
+</BaseLayout>

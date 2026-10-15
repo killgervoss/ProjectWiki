@@ -1,0 +1,152 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { languages, localePath, sitePath, ui, type Lang } from '../../i18n/ui';
+
+export function getStaticPaths() { return languages.map(lang => ({ params: { lang }, props: { lang } })); }
+interface Props { lang: Lang; }
+const { lang } = Astro.props;
+const t = ui(lang);
+const topics = await getCollection('topics', ({ data }) => !data.draft && data.lang === lang);
+const languageLinks = Object.fromEntries(languages.map(language => [language, localePath(language, 'search/')]));
+const isDev = import.meta.env.DEV;
+const searchCopy = {
+  prompt: t.searchPrompt, loading: t.searchLoading, results: t.searchResults,
+  error: t.searchError, noResults: t.searchNoResults,
+};
+---
+
+<BaseLayout lang={lang} title={t.searchTitle} languageLinks={languageLinks}>
+  <section class="shell search-shell">
+    <p class="eyebrow dark-eyebrow">{t.eyebrow}</p>
+    <h1 class="page-title">{t.searchTitle}</h1>
+    <p class="page-description">{t.searchDescription}</p>
+    {topics.length === 0 ? <div class="empty-panel"><p>{t.noArticles}</p>{lang !== 'mn' && <a class="text-link" href={localePath('mn')}>{t.browseMongolian} →</a>}</div>
+      : isDev ? <p class="empty-panel">{t.searchDev}</p> :
+      <div data-search-widget data-copy={JSON.stringify(searchCopy)} data-bundle={sitePath('pagefind/pagefind.js')}>
+        <form id="search-form" role="search">
+          <label class="search-label" for="search-input">{t.searchLabel}</label>
+          <input id="search-input" type="search" placeholder={t.searchPlaceholder} autocomplete="off" aria-controls="search-results" />
+          <div class="filters search-filters">
+            <label>{t.category}<select name="category" data-search-filter disabled><option value="">{t.allCategories}</option></select></label>
+            <label>{t.book}<select name="book" data-search-filter disabled><option value="">{t.allBooks}</option></select></label>
+            <label>{t.tag}<select name="tag" data-search-filter disabled><option value="">{t.allTags}</option></select></label>
+            <button type="button" id="clear-search-filters" class="quiet-button">{t.clear}</button>
+          </div>
+        </form>
+        <p id="search-status" role="status" class="search-status">{t.searchPrompt}</p>
+        <ul id="search-results" class="search-results" aria-busy="false"></ul>
+        <button type="button" id="show-more" class="primary-button" hidden>{t.showMore}</button>
+      </div>}
+    <noscript><p class="empty-panel">{t.searchNoJs} <a class="text-link" href={localePath(lang)}>{t.topics}</a></p></noscript>
+  </section>
+</BaseLayout>
+
+<script>
+  // A small custom UI lets us translate every visible label, including Mongolian.
+  // The Pagefind API automatically selects the index matching <html lang>.
+  interface SearchData { url: string; meta: { title?: string }; excerpt: string; }
+  interface SearchHit { data(): Promise<SearchData>; }
+  interface PagefindAPI {
+    filters(): Promise<Record<string, Record<string, number>>>;
+    search(term: string | null, options: { filters: Record<string, string> }): Promise<{ results: SearchHit[] }>;
+  }
+  interface SearchCopy { prompt: string; loading: string; results: string; error: string; noResults: string; }
+  const widget = document.querySelector<HTMLElement>('[data-search-widget]');
+  if (widget) {
+    const input = widget.querySelector<HTMLInputElement>('#search-input')!;
+    const form = widget.querySelector<HTMLFormElement>('#search-form')!;
+    const status = widget.querySelector<HTMLElement>('#search-status')!;
+    const list = widget.querySelector<HTMLUListElement>('#search-results')!;
+    const more = widget.querySelector<HTMLButtonElement>('#show-more')!;
+    const selects = [...widget.querySelectorAll<HTMLSelectElement>('[data-search-filter]')];
+    const copy = JSON.parse(widget.dataset.copy!) as SearchCopy;
+    let apiPromise: Promise<PagefindAPI> | undefined;
+    let activeResults: SearchHit[] = [];
+    let shown = 0;
+    let revision = 0;
+    let timer: ReturnType<typeof setTimeout>;
+
+    function loadAPI() {
+      if (!apiPromise) {
+        const bundleURL = new URL(widget!.dataset.bundle!, window.location.origin).href;
+        apiPromise = (async () => {
+          const api = await import(/* @vite-ignore */ bundleURL) as PagefindAPI;
+          const filters = await api.filters();
+          for (const select of selects) {
+            for (const value of Object.keys(filters[select.name] ?? {}).sort()) select.add(new Option(value, value));
+            select.disabled = false;
+          }
+          return api;
+        })();
+      }
+      return apiPromise;
+    }
+
+    async function appendResults(currentRevision: number) {
+      const slice = activeResults.slice(shown, shown + 12);
+      more.disabled = true;
+      const data = await Promise.all(slice.map(result => result.data()));
+      if (currentRevision !== revision) return;
+      for (const result of data) {
+        const item = document.createElement('li');
+        const heading = document.createElement('h2');
+        const link = document.createElement('a');
+        const href = new URL(result.url, window.location.origin);
+        if (href.origin !== window.location.origin) continue;
+        link.href = href.href;
+        link.textContent = result.meta.title ?? result.url;
+        heading.append(link);
+        const excerpt = document.createElement('p');
+        // Keep snippets as plain text; do not insert arbitrary HTML into the page.
+        excerpt.textContent = new DOMParser().parseFromString(result.excerpt, 'text/html').body.textContent ?? '';
+        item.append(heading, excerpt);
+        list.append(item);
+      }
+      shown += slice.length;
+      more.hidden = shown >= activeResults.length;
+      more.disabled = false;
+    }
+
+    async function runSearch(currentRevision: number) {
+      const term = input.value.trim();
+      const filters = Object.fromEntries(selects.filter(select => select.value).map(select => [select.name, select.value]));
+      list.replaceChildren();
+      activeResults = [];
+      shown = 0;
+      more.hidden = true;
+      if (!term && Object.keys(filters).length === 0) { status.textContent = copy.prompt; list.setAttribute('aria-busy', 'false'); return; }
+      status.textContent = copy.loading;
+      list.setAttribute('aria-busy', 'true');
+      try {
+        const api = await loadAPI();
+        if (currentRevision !== revision) return;
+        const response = await api.search(term || null, { filters });
+        if (currentRevision !== revision) return;
+        activeResults = response.results;
+        status.textContent = activeResults.length ? copy.results.replace('{count}', String(activeResults.length)) : copy.noResults;
+        await appendResults(currentRevision);
+      } catch {
+        if (currentRevision === revision) status.textContent = copy.error;
+      } finally {
+        if (currentRevision === revision) list.setAttribute('aria-busy', 'false');
+      }
+    }
+    function scheduleSearch(immediate = false) {
+      clearTimeout(timer);
+      const currentRevision = ++revision;
+      more.hidden = true;
+      if (immediate) void runSearch(currentRevision);
+      else timer = setTimeout(() => void runSearch(currentRevision), 200);
+    }
+    // Initialize filters on this dedicated search page so browsing needs no query.
+    void loadAPI().catch(() => { status.textContent = copy.error; });
+    form.addEventListener('submit', event => { event.preventDefault(); scheduleSearch(true); });
+    input.addEventListener('input', () => scheduleSearch());
+    selects.forEach(select => select.addEventListener('change', () => scheduleSearch(true)));
+    widget.querySelector('#clear-search-filters')?.addEventListener('click', () => { selects.forEach(select => { select.value = ''; }); scheduleSearch(true); });
+    more.addEventListener('click', () => {
+      void appendResults(revision).catch(() => { status.textContent = copy.error; more.disabled = false; });
+    });
+  }
+</script>
